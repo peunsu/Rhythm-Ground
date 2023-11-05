@@ -1,0 +1,6 @@
+streamlit
+streamlit_searchbox
+streamlit_extras
+plotly
+pandas
+unidecode
