@@ -4,3 +4,4 @@ streamlit_extras
 plotly
 pandas
 unidecode
+beautifulsoup4
