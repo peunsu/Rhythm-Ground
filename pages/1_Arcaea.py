@@ -9,7 +9,7 @@ from unidecode import unidecode
 import os
 import re
 
-DATA_PATH = "../data/arcaea"
+DATA_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'arcaea')
 DIFF_DICT = {
     0: ":blue[**Past**]",
     1: ":green[**Present**]",
