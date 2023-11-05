@@ -96,8 +96,8 @@ else:
     cur_added = cur_data["Added_Mobile"].values[0] if st.session_state.song_platform == "Mobile" else cur_data["Added_Switch"].values[0]
     cur_chart_design = escape_markdown(cur_data["Chart Design"].values[0])
     
-    cur_cover_art = cur_data["Image"].values[0]
-    cur_artwork = get_image_url(cur_data["Artwork"].values[0])
+    cur_cover_art = get_image_url(cur_data["Image"].values[0])
+    cur_artwork = cur_data["Artwork"].values[0]
     cur_artwork = "(None)" if pd.isna(cur_artwork) else cur_artwork
     cur_pack = cur_data["Pack"].values[0]
     cur_pack_url = get_image_url(pack_data.loc[pack_data['Pack'] == cur_pack, 'Image'].values[0])
