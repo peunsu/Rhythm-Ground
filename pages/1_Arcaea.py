@@ -3,52 +3,66 @@ from streamlit_searchbox import st_searchbox
 import pandas as pd
 from unidecode import unidecode
 import os
+import re
+
+DATA_PATH = "/workspaces/Rhythm-Ground/data/arcaea"
+DIFF_DICT = {
+    0: ":blue[**Past**]",
+    1: ":green[**Present**]",
+    2: ":violet[**Future**]",
+    3: ":red[**Beyond**]",
+    4: ":red[**Beyond (Moment)**]",
+    5: ":red[**Beyond (Eternity)**]"
+    }
 
 st.set_page_config(
     page_title="Arcaea"
 )
 
+@st.cache_resource
+def get_song_data():
+    return pd.read_csv(os.path.join(DATA_PATH, "song_data.csv"), encoding="utf-8-sig").sort_values(by="Title", key=lambda x: x.str.len())
+
+@st.cache_resource
+def get_pack_data():
+    return pd.read_csv(os.path.join(DATA_PATH, "pack_data.csv"), encoding="utf-8-sig")
+
+@st.cache_data
+def search_title(searchterm: str):
+    cond = song_data["ID"].str.contains(re.sub(r'[\W]+', '', unidecode(searchterm).lower()))
+    return list(song_data[cond].loc[:, ["Title", "ID"]].drop_duplicates(subset="Title").itertuples(index=None, name=None))
+
 st.caption("Rhythm Ground")
 st.title("Arcaea")
 
-DATA_PATH = "/workspaces/Rhythm-Ground/data/arcaea"
-DIFF_DICT = {0: ":blue[**Past**]", 1: ":green[**Present**]", 2: ":violet[**Future**]", 3: ":red[**Beyond**]"}
+song_data = get_song_data()
+pack_data = get_pack_data()
 
-song_data = pd.read_csv(os.path.join(DATA_PATH, "song_data.csv"), encoding="utf-8-sig")
-pack_data = pd.read_csv(os.path.join(DATA_PATH, "pack_data.csv"), encoding="utf-8-sig")
-
-def search_title(searchterm: str):
-    searchterm = searchterm.lower().replace(" ", "")
-    cond1 = song_data["Title"].str.lower().replace(" ", "").str.contains(searchterm)
-    cond2 = song_data["ID"].str.contains(searchterm)
-    return song_data[cond1 | cond2].loc[:, "Title"].unique()
-
-selected_title = st_searchbox(
+sel_id = st_searchbox(
     search_title,
     placeholder="Search song by title",
     label="Title"
 )
 
-if selected_title:    
-    selected_id = song_data.loc[song_data["Title"] == selected_title, "ID"].values[0]
-    selected_data = song_data.loc[song_data["ID"] == selected_id]
+if sel_id:
+    sel_data = song_data.loc[song_data["ID"] == sel_id]
 
-    difficulty = st.radio("Difficulty", selected_data["Difficulty"].to_list(), format_func=lambda x: DIFF_DICT[x])
-    cur_data = selected_data[selected_data["Difficulty"] == difficulty]
+    sel_diff = st.radio("Difficulty", sel_data["Difficulty"].to_list(), format_func=lambda x: DIFF_DICT[x])
+    cur_data = sel_data[sel_data["Difficulty"] == sel_diff]
     
     with st.container() as container:
         col1, col2, col3 = st.columns(3)
         
-        title = cur_data["Title"].values[0]
+        cur_title = cur_data["Title"].values[0]
         col1.subheader("Title")
-        col1.text(title)
+        col1.text(cur_title)
         col1.image(cur_data["Image"].values[0])
         
-        pack = cur_data["Pack"].values[0]
-        artist = cur_data["Artist"].values[0]
+        cur_pack = cur_data["Pack"].values[0]
+        cur_artist = cur_data["Artist"].values[0]
         col3.subheader("Pack")
-        col3.text(pack)
-        col3.image(pack_data.loc[pack_data['Pack'] == pack, 'Image'].values[0])
+        col3.text(cur_pack)
+        col3.image(pack_data.loc[pack_data['Pack'] == cur_pack, 'Image'].values[0])
 
     st.subheader("Raw Data")
     st.dataframe(cur_data)

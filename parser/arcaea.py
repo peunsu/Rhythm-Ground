@@ -157,6 +157,9 @@ class ArcaeaDataParser():
         
         self.song_data = process_data(self.song_data)
         
+        # Process Exception (Last)
+        self.song_data.loc[(self.song_data["ID"] == "last") & (self.song_data["Difficulty"] == 3), "Difficulty"] = [4, 5]
+        
         return self.song_data
     
     def get_pack_data(self) -> pd.DataFrame:
@@ -215,5 +218,5 @@ if __name__ == "__main__":
     arcaea = ArcaeaDataParser()
     DATA_PATH = "/workspaces/Rhythm-Ground/data/arcaea"
     arcaea.get_song_data().to_csv(os.path.join(DATA_PATH, "song_data.csv"), index=False)
-    arcaea.get_pack_data().to_csv(os.path.join(DATA_PATH, "pack_data.csv"), index=False)
-    arcaea.get_background_data().to_csv(os.path.join(DATA_PATH, "background_data.csv"), index=False)
+    #arcaea.get_pack_data().to_csv(os.path.join(DATA_PATH, "pack_data.csv"), index=False)
+    #arcaea.get_background_data().to_csv(os.path.join(DATA_PATH, "background_data.csv"), index=False)
