@@ -44,6 +44,9 @@ def escape_markdown(_str: str) -> str:
 def str_to_id(raw_id: str) -> str:
     return re.sub(r'[\W]+', '', unidecode(raw_id).lower())
 
+def get_image_url(raw_url: str) -> str:
+    return raw_url.split("/revision")[0]
+
 song_data = get_song_data()
 pack_data = get_pack_data()
 background_data = get_background_data()
@@ -94,12 +97,12 @@ else:
     cur_chart_design = escape_markdown(cur_data["Chart Design"].values[0])
     
     cur_cover_art = cur_data["Image"].values[0]
-    cur_artwork = cur_data["Artwork"].values[0]
+    cur_artwork = get_image_url(cur_data["Artwork"].values[0])
     cur_artwork = "(None)" if pd.isna(cur_artwork) else cur_artwork
     cur_pack = cur_data["Pack"].values[0]
-    cur_pack_url = pack_data.loc[pack_data['Pack'] == cur_pack, 'Image'].values[0]
+    cur_pack_url = get_image_url(pack_data.loc[pack_data['Pack'] == cur_pack, 'Image'].values[0])
     cur_background = cur_data["Background"].values[0]
-    cur_background_url = background_data.loc[background_data['Background'] == cur_background, 'Image'].values[0].split("/revision")[0]
+    cur_background_url = get_image_url(background_data.loc[background_data['Background'] == cur_background, 'Image'].values[0])
 
     col1, dummy, col2 = st.columns([0.8, 0.05, 0.15])
     
