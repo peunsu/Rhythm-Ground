@@ -289,19 +289,19 @@ def filter_dataframe(df: pd.DataFrame) -> pd.DataFrame:
                     step=step,
                 )
                 df = df[df[column].between(*user_num_input)]
-            elif column in ["Length"]:
-                _min = datetime64_to_datetime(df[column].min())
-                _max = datetime64_to_datetime(df[column].max())
-                step = timedelta(seconds=1)
-                user_num_input = right.slider(
-                    f"Values for {column}",
-                    min_value=_min,
-                    max_value=_max,
-                    value=(_min, _max),
-                    step=step,
-                    format="mm:ss"
-                )
-                df = df[df[column].between(*user_num_input)]
+            #elif column in ["Length"]:
+            #    _min = datetime64_to_datetime(df[column].min())
+            #    _max = datetime64_to_datetime(df[column].max())
+            #    step = timedelta(seconds=1)
+            #    user_num_input = right.slider(
+            #        f"Values for {column}",
+            #        min_value=_min,
+            #        max_value=_max,
+            #        value=(_min, _max),
+            #        step=step,
+            #        format="mm:ss"
+            #    )
+            #    df = df[df[column].between(*user_num_input)]
             elif column in ["Added_Mobile", "Added_Switch"]:
                 user_date_input = right.date_input(
                     f"Values for {column}",
