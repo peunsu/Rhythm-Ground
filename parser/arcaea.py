@@ -51,6 +51,17 @@ class ArcaeaDataParser():
             str: Transformed ID in string.
         """
         return re.sub(r'[\W]+', '', unidecode(raw_id).lower())
+
+    def get_image_url(self, raw_url: str) -> str:
+        """Transform raw URL to image URL.
+
+        Args:
+            raw_url (str): A URL which contains image ext(.png, .jpg, ...).
+
+        Returns:
+            str: Image URL ending with ext.
+        """
+        return raw_url.split("/revision")[0]
     
     def get_songlist(self) -> list:
         """Get a list of Arcaea song titles.
@@ -90,7 +101,7 @@ class ArcaeaDataParser():
                 [soup.find("span", class_="song-template-title").text],
                 [soup.find("span", class_="song-template-pack").text],
                 [soup.find("span", class_="song-template-artist").text],
-                [soup.find("figure").find("a")["href"]]
+                [self.get_image_url(soup.find("figure").find("a")["href"])]
                 ]
 
             tables = soup.find_all("table", class_="pi-horizontal-group")
@@ -138,13 +149,19 @@ class ArcaeaDataParser():
             df = df.join(pd.DataFrame(df['BPM'].map(lambda x: re.findall(r"\d+", x)[-2:]).values.tolist(), columns=["BPM_Min", "BPM_Max"]))
             df["Notes_Joycon"] = df["Notes_Joycon"].mask(df["Version_Switch"].notna(), df["Notes_Joycon"].fillna(df["Notes_Touch"]))
             df["BPM_Max"].fillna(df["BPM_Min"], inplace=True)
+            df["Level"] = df["Level"].map(lambda x: int(x[:-1]) * 2 + 1 if x.endswith("+") else int(x) * 2)
             df.drop(["Notes", "Added", "BPM"], axis=1, inplace=True)
+            
+            for title in df.loc[:, "Title"].unique():
+                temp_df = df.loc[df["Title"] == title]
+                if len(temp_df.loc[:, "ID"].unique()) > 1:
+                    df.loc[df["Title"] == title, "Title"] = temp_df.agg('{0[Title]} ({0[Artist]})'.format, axis=1)
             
             return df
         
         pbar = tqdm(self.get_songlist(), leave=True)
         for title in pbar:
-            pbar.set_description(f"Current Page: {title}")
+            pbar.set_description(f"Current Page: {title: >30}")
             response = self.html_request(title)
             soup = BeautifulSoup(response, "html.parser")
 
@@ -157,7 +174,7 @@ class ArcaeaDataParser():
         
         self.song_data = process_data(self.song_data)
         
-        # Process Exception (Last)
+        # Process Exception
         self.song_data.loc[(self.song_data["ID"] == "last") & (self.song_data["Difficulty"] == 3), "Difficulty"] = [4, 5]
         
         return self.song_data
@@ -178,12 +195,12 @@ class ArcaeaDataParser():
         
         pbar = tqdm(pack_list, leave=True)
         for pack in pbar:
-            pbar.set_description(f"Current Page: {pack}")
+            pbar.set_description(f"Current Page: {pack: >30}")
             if pack.startswith("Memory Archive:"):
                 pack = "Memory Archive"
             response = self.html_request(pack)
             soup = BeautifulSoup(response, "html.parser")
-            image_list.append(soup.find("a", class_="image")['href'])
+            image_list.append(self.get_image_url(soup.find("a", class_="image")['href']))
         
         self.pack_data = pd.DataFrame(zip(id_list, pack_list, image_list), columns=["ID", "Pack", "Image"])
             
@@ -207,7 +224,7 @@ class ArcaeaDataParser():
             tds = table.select("tr td:nth-child(1)")
             for td in tds:
                 name = td.find("span", attrs={"style": (lambda x: x.startswith("color:") if isinstance(x, str) else False)}).text
-                image_list.append(td.find('a')['href'])
+                image_list.append(self.get_image_url(td.find('a')['href']))
                 bg_list.append(name)
 
         self.background_data = pd.DataFrame(zip(bg_list, image_list), columns=["Background", "Image"])
@@ -216,7 +233,7 @@ class ArcaeaDataParser():
 
 if __name__ == "__main__":
     arcaea = ArcaeaDataParser()
-    DATA_PATH = "/workspaces/Rhythm-Ground/data/arcaea"
+    DATA_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'arcaea')
     arcaea.get_song_data().to_csv(os.path.join(DATA_PATH, "song_data.csv"), index=False)
-    #arcaea.get_pack_data().to_csv(os.path.join(DATA_PATH, "pack_data.csv"), index=False)
-    #arcaea.get_background_data().to_csv(os.path.join(DATA_PATH, "background_data.csv"), index=False)
+    arcaea.get_pack_data().to_csv(os.path.join(DATA_PATH, "pack_data.csv"), index=False)
+    arcaea.get_background_data().to_csv(os.path.join(DATA_PATH, "background_data.csv"), index=False)
