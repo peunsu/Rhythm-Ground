@@ -4,6 +4,7 @@ import collections.abc
 collections.Callable = collections.abc.Callable
 
 import pandas as pd
+import numpy as np
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 import requests
@@ -176,6 +177,8 @@ class ArcaeaDataParser():
         
         # Process Exception
         self.song_data.loc[(self.song_data["ID"] == "last") & (self.song_data["Difficulty"] == 3), "Difficulty"] = [4, 5]
+        self.song_data.loc[self.song_data["ID"] == "tothefurthestdream", "Version_Mobile"] = ["5.1.0"] * 3
+        self.song_data.loc[self.song_data["ID"] == "tothefurthestdream", "Version_Switch"] = [np.nan] * 3
         
         return self.song_data
     
@@ -235,5 +238,5 @@ if __name__ == "__main__":
     arcaea = ArcaeaDataParser()
     DATA_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'arcaea')
     arcaea.get_song_data().to_csv(os.path.join(DATA_PATH, "song_data.csv"), index=False)
-    arcaea.get_pack_data().to_csv(os.path.join(DATA_PATH, "pack_data.csv"), index=False)
-    arcaea.get_background_data().to_csv(os.path.join(DATA_PATH, "background_data.csv"), index=False)
+    #arcaea.get_pack_data().to_csv(os.path.join(DATA_PATH, "pack_data.csv"), index=False)
+    #arcaea.get_background_data().to_csv(os.path.join(DATA_PATH, "background_data.csv"), index=False)

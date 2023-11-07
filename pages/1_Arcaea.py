@@ -7,6 +7,7 @@ import plotly.express as px
 import pandas as pd
 import numpy as np
 
+from packaging.version import parse as parse_version
 from unidecode import unidecode
 from datetime import datetime, timedelta
 import os
@@ -137,6 +138,8 @@ class ArcaeaSong:
 def get_song_data():
     df = pd.read_csv(os.path.join(DATA_PATH, "song_data.csv"), encoding="utf-8-sig").sort_values(by="Title", key=lambda x: x.str.len())
     df["Length"] = pd.to_datetime(df['Length'], format='%M:%S', errors='coerce')
+    df["Version_Mobile"] = df["Version_Mobile"].astype(str)
+    df["Version_Switch"] = df["Version_Switch"].astype(str)
     df["Added_Mobile"] = pd.to_datetime(df["Added_Mobile"], format='%Y-%m-%d')
     df["Added_Switch"] = pd.to_datetime(df["Added_Mobile"], format='%Y-%m-%d')
     df["Notes_Touch"] = pd.to_numeric(df['Notes_Touch'], errors='coerce').astype('Int64')
@@ -207,6 +210,10 @@ def plotly_fig(cur_data: pd.DataFrame, var1: str, var2: str) -> Figure:
         line_color="#b0b3b8"
     )
     return fig
+
+@st.cache_data
+def parse_get_versions(df: pd.DataFrame, column: str):
+    return df[column].apply(lambda x: parse_version(x) if x != "nan" else parse_version("0"))
 
 def escape_markdown(_str: str) -> str:
     if pd.isnull(_str):
@@ -289,19 +296,30 @@ def filter_dataframe(df: pd.DataFrame) -> pd.DataFrame:
                     step=step,
                 )
                 df = df[df[column].between(*user_num_input)]
-            #elif column in ["Length"]:
-            #    _min = datetime64_to_datetime(df[column].min())
-            #    _max = datetime64_to_datetime(df[column].max())
-            #    step = timedelta(seconds=1)
-            #    user_num_input = right.slider(
-            #        f"Values for {column}",
-            #        min_value=_min,
-            #        max_value=_max,
-            #        value=(_min, _max),
-            #        step=step,
-            #        format="mm:ss"
-            #    )
-            #    df = df[df[column].between(*user_num_input)]
+            elif column in ["Version_Mobile", "Version_Switch"]:
+                versions = parse_get_versions(df, column)
+                valid_versions = versions[versions > parse_version("0")]
+                _min = valid_versions.min()
+                _max = valid_versions.max()
+                user_num_input = right.select_slider(
+                    f"Values for {column}",
+                    sorted(valid_versions.unique()),
+                    value=(_min, _max)
+                )
+                df = df[versions.between(*user_num_input)]
+            elif column in ["Length"]:
+               _min = datetime64_to_datetime(df[column].min())
+               _max = datetime64_to_datetime(df[column].max())
+               step = timedelta(seconds=1)
+               user_num_input = right.slider(
+                   f"Values for {column}",
+                   min_value=_min,
+                   max_value=_max,
+                   value=(_min, _max),
+                   step=step,
+                   format="mm:ss"
+               )
+               df = df[df[column].between(*user_num_input)]
             elif column in ["Added_Mobile", "Added_Switch"]:
                 user_date_input = right.date_input(
                     f"Values for {column}",
@@ -346,7 +364,7 @@ with st.sidebar:
     
     radio_grid = grid(2)
     radio_grid.radio("Difficulty", song.get_difficulty_list(), format_func=lambda x: DIFF_DICT[x], key="song_diff")
-    radio_grid.radio("Platform", ["Mobile", "Switch"], key="song_platform")
+    radio_grid.radio("Platform", ["Mobile", "Switch"], key="song_platform", disabled=(st.session_state.song_id["result"] is None))
 
 if st.session_state.song_id["result"] is None:
     st.info('To view Arcaea song data, search song by title on the sidebar.', icon="ℹ️")
