@@ -15,6 +15,14 @@ import re
 
 DATA_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'arcaea')
 DIFF_DICT = {
+    0: "Past",
+    1: "Present",
+    2: "Future",
+    3: "Beyond",
+    4: "Beyond (Moment)",
+    5: "Beyond (Eternity)"
+    }
+DIFF_DICT_COLORED = {
     0: ":blue[**Past**]",
     1: ":green[**Present**]",
     2: ":violet[**Future**]",
@@ -45,14 +53,14 @@ class ArcaeaSong:
     
     def __init__(self, id: str):
         self.id = id
-        self.data = get_data_slice(song_data, "ID", st.session_state.song_id["result"])
+        self.data = get_data_slice(song_data, song_data["ID"] == st.session_state.song_id["result"])
         self._difficulty_list = self.data["Difficulty"].sort_values().to_list()
     
     def get_difficulty_list(self):
         return self._difficulty_list
     
     def set_difficulty(self):
-        self.data = get_data_slice(self.data, "Difficulty", st.session_state.song_diff)
+        self.data = get_data_slice(self.data, self.data["Difficulty"] == st.session_state.song_diff)
     
     @property
     def title(self) -> str:
@@ -77,7 +85,7 @@ class ArcaeaSong:
     
     @property
     def level(self) -> str:
-        return convert_level(self.data["Level"].values[0])
+        return level_to_str(self.data["Level"].values[0])
     
     @property
     def notes(self) -> str:
@@ -124,7 +132,7 @@ class ArcaeaSong:
     
     @property
     def pack_image_url(self) -> str:
-        return get_data_slice(pack_data, "Pack", self.pack)["Image"].values[0]
+        return get_data_slice(pack_data, pack_data["Pack"] == self.pack)["Image"].values[0]
     
     @property
     def background(self) -> str:
@@ -132,19 +140,20 @@ class ArcaeaSong:
     
     @property
     def background_image_url(self) -> str:
-        return get_data_slice(background_data, "Background", self.background)["Image"].values[0]
+        return get_data_slice(background_data, background_data["Background"] == self.background)["Image"].values[0]
 
 @st.cache_data
 def get_song_data():
     df = pd.read_csv(os.path.join(DATA_PATH, "song_data.csv"), encoding="utf-8-sig").sort_values(by="Title", key=lambda x: x.str.len())
     df["Length"] = pd.to_datetime(df['Length'], format='%M:%S', errors='coerce')
-    df["Version_Mobile"] = df["Version_Mobile"].astype(str)
-    df["Version_Switch"] = df["Version_Switch"].astype(str)
     df["Added_Mobile"] = pd.to_datetime(df["Added_Mobile"], format='%Y-%m-%d')
     df["Added_Switch"] = pd.to_datetime(df["Added_Mobile"], format='%Y-%m-%d')
     df["Notes_Touch"] = pd.to_numeric(df['Notes_Touch'], errors='coerce').astype('Int64')
     df["Notes_Joycon"] = pd.to_numeric(df['Notes_Joycon'], errors='coerce').astype('Int64')
     df["Level"] = pd.to_numeric(df["Level"], errors="coerce").astype('Int64')
+    df["BPM_Max"] = pd.to_numeric(df["BPM_Max"], errors="coerce").astype('Int64')
+    df["BPM_Min"] = pd.to_numeric(df["BPM_Min"], errors="coerce").astype('Int64')
+    df["Chart Constant"] = pd.to_numeric(df["Chart Constant"], errors="coerce").astype('float64')
     return df
 
 @st.cache_data
@@ -156,8 +165,35 @@ def get_background_data():
     return pd.read_csv(os.path.join(DATA_PATH, "background_data.csv"), encoding="utf-8-sig")
 
 @st.cache_data
-def get_data_slice(data: pd.DataFrame, cols: str, value) -> pd.DataFrame:
-    return data.loc[data[cols] == value]
+def get_data_slice(data: pd.DataFrame, cond: pd.Series) -> pd.DataFrame:
+    return data.loc[cond]
+
+@st.cache_data
+def parse_get_versions(df: pd.DataFrame, column: str):
+    return df[column].apply(lambda x: parse_version(str(x)) if pd.notna(x) else parse_version("0"))
+
+def escape_markdown(_str: str) -> str:
+    if pd.isnull(_str):
+        return ""
+    return _str.translate(str.maketrans({"*": r"\*", "-": r"\-", "_": r"\_", "~": r"\~", "(": r"\(", ")": r"\)", "#": r"\#", "[": r"\[", "]": r"\]"}))
+
+def title_to_id(raw_id: str) -> str:
+    return re.sub(r'[\W]+', '', unidecode(raw_id).lower())
+
+def level_to_str(level: int) -> str:
+    if level % 2 == 0:
+        return str(level // 2)
+    else:
+        return str(level // 2) + "+"
+
+def datetime64_to_datetime(datetime64):
+    return datetime.utcfromtimestamp((datetime64 - np.datetime64('1970-01-01T00:00:00')) / np.timedelta64(1, 's'))
+
+def difficulty_to_str(difficulty: int, colored=False) -> str:
+    if colored:
+        return DIFF_DICT_COLORED[difficulty]
+    else:
+        return DIFF_DICT[difficulty]
 
 @st.cache_data
 def plotly_fig(cur_data: pd.DataFrame, var1: str, var2: str) -> Figure:
@@ -169,8 +205,8 @@ def plotly_fig(cur_data: pd.DataFrame, var1: str, var2: str) -> Figure:
     if var2 == "Minimum BPM":
         col = "BPM_Min"
     
-    chart_data = get_data_slice(song_data, var1, cur_data[var1].values[0]).sort_values(by=col, ascending=False).reset_index()
-    cur_index = get_data_slice(chart_data, 'index', cur_data.index[0]).index[0]
+    chart_data = get_data_slice(song_data, song_data[var1] == cur_data[var1].values[0]).sort_values(by=col, ascending=False).reset_index()
+    cur_index = get_data_slice(chart_data, chart_data['index'] == cur_data.index[0]).index[0]
     cur_value = cur_data[col].values[0]
     top_percentile = cur_index * 100 / chart_data[col].notna().sum()
     
@@ -212,25 +248,9 @@ def plotly_fig(cur_data: pd.DataFrame, var1: str, var2: str) -> Figure:
     return fig
 
 @st.cache_data
-def parse_get_versions(df: pd.DataFrame, column: str):
-    return df[column].apply(lambda x: parse_version(x) if x != "nan" else parse_version("0"))
-
-def escape_markdown(_str: str) -> str:
-    if pd.isnull(_str):
-        return ""
-    return _str.translate(str.maketrans({"*": r"\*", "-": r"\-", "_": r"\_", "~": r"\~", "(": r"\(", ")": r"\)", "#": r"\#", "[": r"\[", "]": r"\]"}))
-
-def str_to_id(raw_id: str) -> str:
-    return re.sub(r'[\W]+', '', unidecode(raw_id).lower())
-
-def convert_level(level: int) -> str:
-    if level % 2 == 0:
-        return str(level // 2)
-    else:
-        return str(level // 2) + "+"
-
-def datetime64_to_datetime(datetime64):
-    return datetime.utcfromtimestamp((datetime64 - np.datetime64('1970-01-01T00:00:00')) / np.timedelta64(1, 's'))
+def search_title(searchterm: str):
+    cond = song_data["ID"].str.contains(title_to_id(searchterm))
+    return list(song_data[cond].loc[:, ["Title", "ID"]].drop_duplicates(subset="Title").itertuples(index=None, name=None))
 
 def filter_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -246,22 +266,28 @@ def filter_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
     if not modify:
         return df
-
-    df = df.copy()
+    
+    cond = np.full(len(df), True)
 
     modification_container = st.container()
 
     with modification_container:
-        to_filter_columns = st.multiselect("Filter dataframe on", df.columns)
+        to_filter_columns = st.multiselect("Filter dataframe on", df.columns[~df.columns.isin(['ID', 'Image'])])
         for column in to_filter_columns:
             left, right = st.columns((1, 20))
-            if column in ["Side", "Difficulty"]:
+            if column in ["Side", "Background", "Pack"]:
+                user_cat_input = right.multiselect(
+                    f"Values for {column}",
+                    df[column].unique()
+                )
+                cond &= df[column].isin(user_cat_input)
+            elif column in ["Difficulty"]:
                 user_cat_input = right.multiselect(
                     f"Values for {column}",
                     df[column].unique(),
-                    default=list(df[column].unique()),
+                    format_func=difficulty_to_str
                 )
-                df = df[df[column].isin(user_cat_input)]
+                cond &= df[column].isin(user_cat_input)
             elif column in ["Level"]:
                 _min = df[column].min()
                 _max = df[column].max()
@@ -269,13 +295,13 @@ def filter_dataframe(df: pd.DataFrame) -> pd.DataFrame:
                     f"Values for {column}",
                     sorted(df[column].unique()),
                     value=(_min, _max),
-                    format_func=convert_level
+                    format_func=level_to_str
                 )
-                df = df[df[column].between(*user_num_input)]
-            elif column in ["Notes_Touch", "Notes_Joycon"]:
+                cond &= df[column].between(*user_num_input)
+            elif column in ["Chart Constant"]:
                 _min = float(df[column].min())
                 _max = float(df[column].max())
-                step = (_max - _min) / 100
+                step = 0.1
                 user_num_input = right.slider(
                     f"Values for {column}",
                     min_value=_min,
@@ -283,11 +309,11 @@ def filter_dataframe(df: pd.DataFrame) -> pd.DataFrame:
                     value=(_min, _max),
                     step=step,
                 )
-                df = df[df[column].between(*user_num_input)]
-            elif column in ["Chart Constant", "BPM_Min", "BPM_Max"]:
-                _min = float(df[column].min())
-                _max = float(df[column].max())
-                step = (_max - _min) / 100
+                cond &= df[column].between(*user_num_input)
+            elif column in ["Notes_Touch", "Notes_Joycon", "BPM_Min", "BPM_Max"]:
+                _min = df[column].min()
+                _max = df[column].max()
+                step = 1
                 user_num_input = right.slider(
                     f"Values for {column}",
                     min_value=_min,
@@ -295,7 +321,7 @@ def filter_dataframe(df: pd.DataFrame) -> pd.DataFrame:
                     value=(_min, _max),
                     step=step,
                 )
-                df = df[df[column].between(*user_num_input)]
+                cond &= df[column].between(*user_num_input)
             elif column in ["Version_Mobile", "Version_Switch"]:
                 versions = parse_get_versions(df, column)
                 valid_versions = versions[versions > parse_version("0")]
@@ -306,20 +332,20 @@ def filter_dataframe(df: pd.DataFrame) -> pd.DataFrame:
                     sorted(valid_versions.unique()),
                     value=(_min, _max)
                 )
-                df = df[versions.between(*user_num_input)]
+                cond &= versions.between(*user_num_input)
             elif column in ["Length"]:
-               _min = datetime64_to_datetime(df[column].min())
-               _max = datetime64_to_datetime(df[column].max())
-               step = timedelta(seconds=1)
-               user_num_input = right.slider(
-                   f"Values for {column}",
-                   min_value=_min,
-                   max_value=_max,
-                   value=(_min, _max),
-                   step=step,
-                   format="mm:ss"
-               )
-               df = df[df[column].between(*user_num_input)]
+                _min = datetime64_to_datetime(df[column].min())
+                _max = datetime64_to_datetime(df[column].max())
+                step = timedelta(seconds=1)
+                user_num_input = right.slider(
+                    f"Values for {column}",
+                    min_value=_min,
+                    max_value=_max,
+                    value=(_min, _max),
+                    step=step,
+                    format="mm:ss"
+                )
+                cond &= df[column].between(*user_num_input)
             elif column in ["Added_Mobile", "Added_Switch"]:
                 user_date_input = right.date_input(
                     f"Values for {column}",
@@ -331,24 +357,28 @@ def filter_dataframe(df: pd.DataFrame) -> pd.DataFrame:
                 if len(user_date_input) == 2:
                     user_date_input = tuple(map(pd.to_datetime, user_date_input))
                     start_date, end_date = user_date_input
-                    df = df.loc[df[column].between(start_date, end_date)]
+                    cond &= df[column].between(start_date, end_date)
             else:
                 user_text_input = right.text_input(
-                    f"Substring or regex in {column}",
+                    f"Substring in {column}",
                 )
                 if user_text_input:
-                    df = df[df[column].astype(str).str.contains(user_text_input)]
-
-    return df
+                    cond &= df[column].astype(str).str.lower().str.contains(user_text_input.lower())
+    
+    return df.loc[cond]
 
 song_data = get_song_data()
 pack_data = get_pack_data()
 background_data = get_background_data()
-
-@st.cache_data
-def search_title(searchterm: str):
-    cond = song_data["ID"].str.contains(str_to_id(searchterm))
-    return list(song_data[cond].loc[:, ["Title", "ID"]].drop_duplicates(subset="Title").itertuples(index=None, name=None))
+column_config = {
+    "ID": None,
+    "Title": st.column_config.TextColumn(width="medium"),
+    "Image": st.column_config.ImageColumn(width="small"),
+    "Length": st.column_config.DatetimeColumn(format="mm:ss"),
+    "Added_Mobile": st.column_config.DatetimeColumn(format="YYYY-MM-DD"),
+    "Added_Switch": st.column_config.DatetimeColumn(format="YYYY-MM-DD"),
+    "Chart Constant": st.column_config.NumberColumn(format="%.1f")
+    }
 
 with st.sidebar:
     st.header("Search")
@@ -359,17 +389,17 @@ with st.sidebar:
         label="Title",
         key="song_id"
     )
-
+    
     song = ArcaeaSong(st.session_state.song_id["result"])
     
     radio_grid = grid(2)
-    radio_grid.radio("Difficulty", song.get_difficulty_list(), format_func=lambda x: DIFF_DICT[x], key="song_diff")
+    radio_grid.radio("Difficulty", song.get_difficulty_list(), format_func=lambda x: difficulty_to_str(x, colored=True), key="song_diff")
     radio_grid.radio("Platform", ["Mobile", "Switch"], key="song_platform", disabled=(st.session_state.song_id["result"] is None))
 
 if st.session_state.song_id["result"] is None:
-    st.info('To view Arcaea song data, search song by title on the sidebar.', icon="ℹ️")
-    st.divider()
-    st.dataframe(filter_dataframe(song_data), hide_index=True)
+    st.header("Arcaea Database")
+    
+    st.info('To view detailed Arcaea song data, search song by title on the sidebar.', icon="ℹ️")
 else:
     song.set_difficulty()
 
@@ -387,7 +417,6 @@ else:
             """)
         
     col1.divider()
-    
     
     if pd.isna(song.notes):
         with col1.container():
@@ -429,4 +458,9 @@ else:
     st.divider()
             
     st.subheader("Raw Data")
-    st.dataframe(song.data, column_config={"Image": st.column_config.ImageColumn(width="small")})
+    st.dataframe(song.data, column_config=column_config, hide_index=True)
+
+st.divider()
+    
+st.subheader("Explore Arcaea Song Data")
+st.dataframe(filter_dataframe(song_data), column_config=column_config, hide_index=True)
